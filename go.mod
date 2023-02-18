@@ -3,7 +3,7 @@ module github.com/irth/broadcast
 go 1.19
 
 require (
-	github.com/irth/chanutil v0.1.1
+	github.com/irth/chanutil v0.2.0
 	github.com/stretchr/testify v1.8.1
 )
 

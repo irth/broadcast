@@ -2,7 +2,6 @@ package broadcast_test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -98,7 +97,6 @@ func TestBroadcast(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 42, *ret)
 		returned += 1
-		fmt.Println("get", returned)
 	}
 
 	require.Equal(t, n, returned)

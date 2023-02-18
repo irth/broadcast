@@ -15,9 +15,9 @@ var nothing _nothing = struct{}{}
 type Channel[T any] struct {
 	broadcastCh chan T
 
-	subReq      chan *request[chan T, _nothing]
-	subCountReq chan *request[_nothing, int]
-	closeReq    chan *request[_nothing, _nothing]
+	subReq      chanutil.RequestChannel[chan T, _nothing]
+	subCountReq chanutil.RequestChannel[_nothing, int]
+	closeReq    chanutil.RequestChannel[_nothing, _nothing]
 
 	subs map[chan T]struct{}
 
@@ -30,9 +30,9 @@ func NewChannel[T any]() *Channel[T] {
 		// TODO: make queue sizes configurable?
 		broadcastCh: make(chan T, 128),
 
-		subReq:      make(chan *request[chan T, _nothing], 8),
-		subCountReq: make(chan *request[_nothing, int], 8),
-		closeReq:    make(chan *request[_nothing, _nothing], 1),
+		subReq:      make(chanutil.RequestChannel[chan T, _nothing], 8),
+		subCountReq: make(chanutil.RequestChannel[_nothing, int], 8),
+		closeReq:    make(chanutil.RequestChannel[_nothing, _nothing], 1),
 
 		subs: make(map[chan T]struct{}, 8),
 
@@ -51,7 +51,7 @@ func (c *Channel[T]) Run(ctx context.Context) {
 		c.running = false
 	}()
 
-	var closeReq *request[_nothing, _nothing] = nil
+	var closeReq *chanutil.Request[_nothing, _nothing] = nil
 	defer func() {
 		for ch := range c.subs {
 			close(ch)
@@ -102,7 +102,7 @@ func (c *Channel[T]) broadcast(m T) {
 
 func (c *Channel[T]) Subscribe(ctx context.Context) (<-chan T, error) {
 	ch := make(chan T, 8)
-	_, err := sendRequest(ctx, c.subReq, ch)
+	_, err := c.subReq.Call(ctx, ch)
 	if err != nil {
 		return nil, fmt.Errorf("subscription failed: %w", err)
 	}
@@ -111,7 +111,7 @@ func (c *Channel[T]) Subscribe(ctx context.Context) (<-chan T, error) {
 }
 
 func (c *Channel[T]) SubCount(ctx context.Context) (int, error) {
-	subCount, err := sendRequest(ctx, c.subCountReq, nothing)
+	subCount, err := c.subCountReq.Call(ctx, nothing)
 
 	if err != nil {
 		return 0, fmt.Errorf("subscription failed: %w", err)
@@ -125,7 +125,7 @@ func (c *Channel[T]) Close(ctx context.Context) error {
 	defer c.runningL.Unlock()
 
 	if c.running {
-		_, err := sendRequest(ctx, c.closeReq, nothing)
+		_, err := c.closeReq.Call(ctx, nothing)
 		return err
 	}
 
