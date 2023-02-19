@@ -16,6 +16,7 @@ type Channel[T any] struct {
 	broadcastCh chan T
 
 	subReq      chanutil.RequestChannel[chan T, _nothing]
+	unsubReq    chanutil.RequestChannel[chan T, _nothing]
 	subCountReq chanutil.RequestChannel[_nothing, int]
 	closeReq    chanutil.RequestChannel[_nothing, _nothing]
 
@@ -31,6 +32,7 @@ func NewChannel[T any]() *Channel[T] {
 		broadcastCh: make(chan T, 128),
 
 		subReq:      make(chanutil.RequestChannel[chan T, _nothing], 8),
+		unsubReq:    make(chanutil.RequestChannel[chan T, _nothing], 8),
 		subCountReq: make(chanutil.RequestChannel[_nothing, int], 8),
 		closeReq:    make(chanutil.RequestChannel[_nothing, _nothing], 1),
 
@@ -70,6 +72,11 @@ func (c *Channel[T]) Run(ctx context.Context) {
 			c.subs[ch] = nothing
 			r.Ok(nothing)
 			// TODO: do something with errors from r.Ok
+		case r := <-c.unsubReq:
+			ch := r.Args()
+			close(ch)
+			delete(c.subs, ch)
+			r.Ok(nothing)
 		case r := <-c.subCountReq:
 			r.Ok(len(c.subs))
 		case r := <-c.closeReq:
@@ -100,14 +107,33 @@ func (c *Channel[T]) broadcast(m T) {
 	}
 }
 
-func (c *Channel[T]) Subscribe(ctx context.Context) (<-chan T, error) {
+type Sub[T any] interface {
+	Ch() <-chan T
+	Unsubscribe(ctx context.Context) error
+}
+
+type sub[T any] struct {
+	ch chan T
+	c  *Channel[T]
+}
+
+func (s sub[T]) Ch() <-chan T {
+	return s.ch
+}
+
+func (s sub[T]) Unsubscribe(ctx context.Context) error {
+	_, err := s.c.unsubReq.Call(ctx, s.ch)
+	return err
+}
+
+func (c *Channel[T]) Subscribe(ctx context.Context) (Sub[T], error) {
 	ch := make(chan T, 8)
 	_, err := c.subReq.Call(ctx, ch)
 	if err != nil {
 		return nil, fmt.Errorf("subscription failed: %w", err)
 	}
 
-	return ch, nil
+	return sub[T]{ch: ch, c: c}, nil
 }
 
 func (c *Channel[T]) SubCount(ctx context.Context) (int, error) {

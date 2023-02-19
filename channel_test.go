@@ -26,7 +26,7 @@ func TestSubscribe(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 0, subcount)
 
-	_, err = ch.Subscribe(ctx)
+	sub, err := ch.Subscribe(ctx)
 	assert.NoError(t, err)
 
 	subcount, err = ch.SubCount(ctx)
@@ -42,6 +42,13 @@ func TestSubscribe(t *testing.T) {
 	subcount, err = ch.SubCount(ctx)
 	assert.NoError(t, err)
 	assert.Equal(t, 3, subcount)
+
+	err = sub.Unsubscribe(ctx)
+	assert.NoError(t, err)
+
+	subcount, err = ch.SubCount(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, subcount)
 }
 
 func startSubscribers[T any](t testing.TB, ctx context.Context, ch *broadcast.Channel[T], n int) chan T {
@@ -55,7 +62,7 @@ func startSubscribers[T any](t testing.TB, ctx context.Context, ch *broadcast.Ch
 		go func() {
 			getNo := 0
 			for {
-				m, more, err := chanutil.Get(ctx, sub)
+				m, more, err := chanutil.Get(ctx, sub.Ch())
 				require.NoError(t, err, "get from subscriber %d (%d)", s, getNo)
 				getNo += 1
 				if !more {
@@ -144,11 +151,11 @@ func TestClose(t *testing.T) {
 	err = ch.Close(ctx)
 	assert.NoError(t, err)
 
-	_, more, err := chanutil.Get(ctx, sub1)
+	_, more, err := chanutil.Get(ctx, sub1.Ch())
 	assert.NoError(t, err)
 	assert.False(t, more)
 
-	_, more, err = chanutil.Get(ctx, sub2)
+	_, more, err = chanutil.Get(ctx, sub2.Ch())
 	assert.NoError(t, err)
 	assert.False(t, more)
 }
